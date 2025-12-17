@@ -106,6 +106,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   logEvent(event:any) {
+    console.log('[PDK] logEvent')
     if (event !== undefined) {
       if (['', null, undefined].includes(event.name) == false) {
         console.log('[PDK] Enqueue data point for logging:')
