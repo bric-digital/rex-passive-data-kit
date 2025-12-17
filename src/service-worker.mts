@@ -428,6 +428,5 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
 const plugin = new PassiveDataKitModule()
 
 registerWebmunkModule(plugin)
-plugin.setup()
 
 export default plugin
