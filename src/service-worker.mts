@@ -26,6 +26,10 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
     super()
   }
 
+  moduleName() {
+    return 'PassiveDataKitModule'
+  }
+
   setup() {
     console.log(`Setting up PassiveDataKitModule...`)
 
