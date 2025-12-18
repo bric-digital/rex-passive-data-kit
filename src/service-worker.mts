@@ -86,9 +86,14 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
         })
       }
     })
+
+    this.refreshConfiguration()
   }
 
   updateConfiguration(config) {
+    console.log('[PDK] updateConfiguration')
+    console.log(config)
+
     this.uploadUrl = config['endpoint']
     this.identifier = config['identifier']
 
