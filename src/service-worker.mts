@@ -296,6 +296,8 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   async uploadQueuedDataPoints (progressCallback) {
+    const me = this
+
     return new Promise<void>((resolve, reject) => {
       if (this.currentlyUploading) {
         resolve()
@@ -374,18 +376,18 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
                 xmitBundle.push(status)
 
                 if (toTransmit.length === 0) {
-                  this.currentlyUploading = false
+                  me.currentlyUploading = false
 
                   resolve()
                 } else {
-                  this.uploadBundle(xmitBundle)
+                  me.uploadBundle(xmitBundle)
                     .then(() => {
-                      return this.updateDataPoints(toTransmit)
+                      return me.updateDataPoints(toTransmit)
                     })
                     .then(() => {
-                      this.currentlyUploading = false
+                      me.currentlyUploading = false
 
-                      return this.uploadQueuedDataPoints(progressCallback)
+                      return me.uploadQueuedDataPoints(progressCallback)
                     })
                 }
               })
