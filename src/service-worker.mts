@@ -78,6 +78,8 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
     this.uploadUrl = config['endpoint']
     this.identifier = config['identifier']
 
+    console.log(`this.identifier = ${this.identifier}`)
+
     let fieldKey = config['field_key']
 
     if (['', undefined, null].includes(fieldKey) === false) {
