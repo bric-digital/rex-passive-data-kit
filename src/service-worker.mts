@@ -247,6 +247,8 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
         .then(function (buffer) {
           const compressedBase64 = me.blobToB64(buffer)
 
+          console.log(`[PDK] upload to "${me.uploadUrl}"...`)
+
           fetch(me.uploadUrl, {
             method: 'POST',
             mode: 'cors', // no-cors, *cors, same-origin
