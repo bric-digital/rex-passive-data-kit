@@ -31,8 +31,6 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   setup() {
-    console.log(`Setting up PassiveDataKitModule...`)
-
     const request = indexedDB.open('passive_data_kit', PDK_DATABASE_VERSION)
 
     request.onerror = (event) => {
@@ -42,7 +40,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
     request.onsuccess = (event) => {
       this.database = request.result
 
-      console.error(`[PassiveDataKitModule] Successfully opened Passive Data Kit database.`)
+      console.log(`[PassiveDataKitModule] Successfully opened Passive Data Kit database.`)
     }
 
     request.onupgradeneeded = (event) => {
@@ -59,6 +57,8 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
           dataPoints.createIndex('dataPoint', 'dataPoint', { unique: false })
           dataPoints.createIndex('date', 'date', { unique: false })
           dataPoints.createIndex('transmitted', 'transmitted', { unique: false })
+
+          console.log(`[PassiveDataKitModule] Successfully upgraded Passive Data Kit database.`)
         }
       }
     }
