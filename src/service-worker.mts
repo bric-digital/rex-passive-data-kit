@@ -280,6 +280,8 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   async updateDataPoints(dataPoints) {
+    const me = this
+
     return new Promise<void>((resolve, reject) => {
       if (dataPoints.length === 0) {
         resolve()
@@ -291,7 +293,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
           .put(dataPoint)
 
         request.onsuccess = function (event) {
-          this.updateDataPoints(dataPoints)
+          me.updateDataPoints(dataPoints)
         }
 
         request.onerror = function (event) {
