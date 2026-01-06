@@ -137,3 +137,15 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+.DS_Store
+
+# Test directory outputs
+build/
+playwright-report/
+test-results/
+
+tests/node_modules/
+tests/list-utilities.bundle.js
+tests/list-utilities.bundle.js.map
+tests/.playwright/

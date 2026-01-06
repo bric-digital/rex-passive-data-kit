@@ -39,7 +39,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
       console.error(`[PassiveDataKitModule] Unable to open Passive Data Kit database: ${event}`)
     }
 
-    request.onsuccess = (event) => {
+    request.onsuccess = (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
       this.database = request.result
 
       console.log(`[PassiveDataKitModule] Successfully opened Passive Data Kit database.`)
@@ -80,7 +80,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
 
     console.log(`this.identifier = ${this.identifier}`)
 
-    let fieldKey = config['field_key']
+    const fieldKey = config['field_key']
 
     if (['', undefined, null].includes(fieldKey) === false) {
       const keyPair = nacl.box.keyPair()
@@ -99,8 +99,6 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   refreshConfiguration() {
     console.log('PassiveDataKitModule refreshing configuration...')
 
-    const me = this
-
     webmunkCorePlugin.fetchConfiguration()
       .then((configuration:WebmunkConfiguration) => {
         console.log('PassiveDataKitModule fetched:')
@@ -112,7 +110,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
           if (passiveDataKitConfig !== undefined) {
             this.updateConfiguration(passiveDataKitConfig)
 
-            if (me.alarmCreated === false) {
+            if (this.alarmCreated === false) {
               chrome.alarms.create('pdk-upload', { periodInMinutes: 0.5 })
 
               chrome.alarms.onAlarm.addListener((alarm) => {
@@ -122,18 +120,18 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
                 if (alarm.name === 'pdk-upload') {
                   console.log(`[PDK] Uploading data points...`)
 
-                  me.uploadQueuedDataPoints((remaining) => {
+                  this.uploadQueuedDataPoints((remaining) => {
                     console.log(`[PDK] ${remaining} data points to upload...`)
                   })
                   .then(() => {
                     console.log(`[PDK] Upload complete...`)
 
-                    me.refreshConfiguration()
+                    this.refreshConfiguration()
                   })
                 }
               })
 
-              me.alarmCreated = true
+              this.alarmCreated = true
             }
             return
           }
@@ -145,13 +143,13 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
       })
   }
 
-  logEvent(event:any) {
+  logEvent(event:object) {
     if (event !== undefined) {
-      if (['', null, undefined].includes(event.name) == false) {
+      if (['', null, undefined].includes(event['name']) == false) {
         console.log('[PDK] Enqueue data point for logging:')
         console.log(event)
 
-        this.enqueueDataPoint(event.name, event)
+        this.enqueueDataPoint(event['name'], event)
       }
     }
   }
@@ -200,7 +198,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
       pendingPoints.forEach(function (point) {
         const request = objectStore.add(point)
 
-        request.onsuccess = function (event) {
+        request.onsuccess = function (event) { // eslint-disable-line @typescript-eslint/no-unused-vars
           console.log(`[PassiveDataKitModule] Data point saved successfully: ${point.generatorId}.`)
         }
 
@@ -217,14 +215,12 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   async uploadBundle(points) {
-    const me = this
-
     return new Promise<void>((resolve) => {
       const manifest = chrome.runtime.getManifest()
 
-      const keyPair = nacl.box.keyPair()
+      const keyPair = nacl.box.keyPair() // eslint-disable-line @typescript-eslint/no-unused-vars
 
-      const serverPublicKey = naclUtil.decodeBase64(this.serverKey)
+      const serverPublicKey = naclUtil.decodeBase64(this.serverKey) // eslint-disable-line @typescript-eslint/no-unused-vars
 
       const userAgent = manifest.name + '/' + manifest.version + ' ' + navigator.userAgent
 
@@ -235,9 +231,9 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
           points[i].date = (new Date()).getTime()
         }
 
-        console.log(`metadata['source'] = ${me.identifier}`)
+        console.log(`metadata['source'] = ${this.identifier}`)
 
-        metadata['source'] = me.identifier
+        metadata['source'] = this.identifier
         metadata['generator'] = points[i].generatorId + ': ' + userAgent
         metadata['generator-id'] = points[i].generatorId
         metadata['timestamp'] = points[i].date / 1000 // Unix timestamp
@@ -260,12 +256,12 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
       const compressedResponse = new Response(cs.readable)
 
       compressedResponse.arrayBuffer()
-        .then(function (buffer) {
-          const compressedBase64 = me.blobToB64(buffer)
+        .then((buffer) => {
+          const compressedBase64 = this.blobToB64(buffer)
 
-          console.log(`[PDK] upload to "${me.uploadUrl}"...`)
+          console.log(`[PDK] upload to "${this.uploadUrl}"...`)
 
-          fetch(me.uploadUrl, {
+          fetch(this.uploadUrl, {
             method: 'POST',
             mode: 'cors', // no-cors, *cors, same-origin
             cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
@@ -280,7 +276,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
             })
           }) // body data type must match "Content-Type" header
             .then(response => response.json())
-            .then(function (data) {
+            .then(function (data) {// eslint-disable-line @typescript-eslint/no-unused-vars
               resolve()
             })
             .catch((error) => {
@@ -291,8 +287,6 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   async updateDataPoints(dataPoints) {
-    const me = this
-
     return new Promise<void>((resolve, reject) => {
       if (dataPoints.length === 0) {
         resolve()
@@ -303,8 +297,8 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
           .objectStore('dataPoints')
           .put(dataPoint)
 
-        request.onsuccess = function (event) {
-          me.updateDataPoints(dataPoints)
+        request.onsuccess = (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+          this.updateDataPoints(dataPoints)
         }
 
         request.onerror = function (event) {
@@ -318,8 +312,6 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   }
 
   async uploadQueuedDataPoints (progressCallback) {
-    const me = this
-
     return new Promise<void>((resolve, reject) => {
       if (this.currentlyUploading) {
         resolve()
@@ -398,18 +390,18 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
                 xmitBundle.push(status)
 
                 if (toTransmit.length === 0) {
-                  me.currentlyUploading = false
+                  this.currentlyUploading = false
 
                   resolve()
                 } else {
-                  me.uploadBundle(xmitBundle)
+                  this.uploadBundle(xmitBundle)
                     .then(() => {
-                      return me.updateDataPoints(toTransmit)
+                      return this.updateDataPoints(toTransmit)
                     })
                     .then(() => {
-                      me.currentlyUploading = false
+                      this.currentlyUploading = false
 
-                      return me.uploadQueuedDataPoints(progressCallback)
+                      return this.uploadQueuedDataPoints(progressCallback)
                     })
                 }
               })

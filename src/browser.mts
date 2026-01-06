@@ -3,7 +3,7 @@ import { WebmunkConfiguration } from '@bric/webmunk-core/extension'
 import { WebmunkClientModule, registerWebmunkModule } from '@bric/webmunk-core/browser'
 
 class PassiveDataKitModule extends WebmunkClientModule {
-  configuration: any
+  configuration: object
   refreshTimeout: number = 0
 
   constructor() {
@@ -29,8 +29,9 @@ class PassiveDataKitModule extends WebmunkClientModule {
       return
     }
 
-    for (const elementRule of this.configuration['passive_data_kit']) {
-    }
+    // for (const elementRule of this.configuration['passive_data_kit']) {
+
+    // }
   }
 }
 
