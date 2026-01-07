@@ -15,6 +15,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   localFieldKey:Uint8Array<ArrayBufferLike>
 
   identifier:string = 'unknown-id'
+  group:string = 'unknown-group'
 
   alarmCreated:boolean = false
 
@@ -75,8 +76,14 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
     console.log('[PDK] updateConfiguration')
     console.log(config)
 
+    chrome.storage.local.get('webmunkIdentifier', (result) => {
+      if (result['webmunkIdentifier'] !== undefined) {
+        this.identifier = result['webmunkIdentifier']
+      }
+    })
+
     this.uploadUrl = config['endpoint']
-    this.identifier = config['identifier']
+    this.group = config['identifier']
 
     console.log(`this.identifier = ${this.identifier}`)
 
@@ -238,6 +245,7 @@ class PassiveDataKitModule extends WebmunkServiceWorkerModule {
         console.log(`metadata['source'] = ${me.identifier}`)
 
         metadata['source'] = me.identifier
+        metadata['group'] = me.group
         metadata['generator'] = points[i].generatorId + ': ' + userAgent
         metadata['generator-id'] = points[i].generatorId
         metadata['timestamp'] = points[i].date / 1000 // Unix timestamp
