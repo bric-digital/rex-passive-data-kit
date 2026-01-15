@@ -11,8 +11,8 @@ const PDK_DATABASE_VERSION = 1
 class PassiveDataKitModule extends WebmunkServiceWorkerModule {
   uploadUrl:string = ''
   serverKey:string = ''
-  serverFieldKey:Uint8Array<ArrayBufferLike>
-  localFieldKey:Uint8Array<ArrayBufferLike>
+  serverFieldKey:Uint8Array
+  localFieldKey:Uint8Array
 
   identifier:string = 'unknown-id'
   group:string = 'unknown-group'
