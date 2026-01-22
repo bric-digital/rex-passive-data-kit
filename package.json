@@ -37,7 +37,7 @@
         "typescript-eslint": "^8.46.3"
     },
     "dependencies": {
-        "@bric/webmunk-core": "github:bric-digital/webmunk-core#ek_dev",
+        "@bric/webmunk-core": "github:bric-digital/webmunk-core",
         "jquery": "^3.7.1",
         "tweetnacl": "^1.0.3",
         "tweetnacl-util": "^0.15.1"
