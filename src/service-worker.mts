@@ -179,6 +179,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     console.log(this.queuedPoints)
 
     if (this.queuedPoints.length > 0 && (Date.now() - this.lastPersisted) > 1000) {
+      console.log('persisting points')
       this.persistDataPoints()
         .then((pointsSaved) => {
           console.log(`${pointsSaved} points saved successfully.`)
@@ -199,6 +200,9 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
           const objectStore = this.database.transaction(['dataPoints'], 'readwrite').objectStore('dataPoints')
 
           const point = this.queuedPoints.pop()
+
+          console.log('persisting')
+          console.log(point)
 
           const request = objectStore.add(point)
 
