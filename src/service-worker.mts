@@ -144,7 +144,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       this.queuedPoints.push(payload)
     }
 
-    if (this.queuedPoints.length > 0) { // } && (Date.now() - this.lastPersisted) > 1000) {
+    if (this.queuedPoints.length > 0 && (Date.now() - this.lastPersisted) > 1000) {
       this.persistDataPoints()
         .then((pointsSaved) => {
           console.log(`[rex-passive-data-kit] ${pointsSaved} points saved successfully.`)
