@@ -1,1 +1,1 @@
-# webmunk-passive-data-kit
+# rex-passive-data-kit

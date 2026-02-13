@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * Tests IndexedDB operations, CRUD, pattern matching, and bulk operations
  */
 
-test.describe('Webmunk - Page Manipulation - Browser', () => {
+test.describe('REX - Passive Data Kit - Browser', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/browser.html');
     await page.waitForFunction(() => window.testUtilitiesReady === true);
