@@ -3,6 +3,7 @@ import * as nacl from "tweetnacl";
 import * as naclUtil from "tweetnacl-util";
 
 import { REXConfiguration } from '@bric/rex-core/extension'
+import { REXContentProcessorManager } from '@bric/rex-content-processing/library'
 import rexCorePlugin, { REXServiceWorkerModule, registerREXModule } from '@bric/rex-core/service-worker'
 import { error } from "jquery";
 
@@ -123,7 +124,10 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         console.log('[rex-passive-data-kit] Enqueue data point for logging:')
         console.log(event)
 
-        this.enqueueDataPoint(event['name'], event)
+        REXContentProcessorManager.getInstance().processContent(event)
+          .then((processed) => {
+            this.enqueueDataPoint(event['name'], processed)
+          })
       }
     }
   }
