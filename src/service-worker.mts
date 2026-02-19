@@ -101,7 +101,10 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
               console.log(`[rex-passive-data-kit] ${remaining} data points to upload...`)
             })
               .then(() => {
-                console.log(`[rex-passive-data-kit] Upload complete...`)
+                console.log(`[rex-passive-data-kit] Upload complete.`)
+              })
+              .catch((error) => {
+                console.log(`[rex-passive-data-kit] Upload error: ${error}`)
               })
 
             return
@@ -190,7 +193,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   }
 
   async uploadBundle(points) {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       const manifest = chrome.runtime.getManifest()
 
       const keyPair = nacl.box.keyPair() // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -254,6 +257,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             })
             .catch((error) => {
               console.error('Error:', error)
+
+              reject(error)
             })
         })
     })
@@ -287,117 +292,121 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   async uploadQueuedDataPoints (progressCallback) {
     return new Promise<void>((resolve, reject) => {
       if (this.currentlyUploading) {
-        resolve()
-        return
-      }
+        reject('Still uploading data points. Skipping...')
+      } else if (this.database === null) {
+        reject('Database not yet open. Skipping')
+      } else {
+        const index = this.database.transaction(['dataPoints'], 'readonly')
+          .objectStore('dataPoints')
+          .index('transmitted')
 
-      if (this.database === null) {
-        resolve()
-        return
-      }
+        const countRequest = index.count(0)
 
-      const index = this.database.transaction(['dataPoints'], 'readonly')
-        .objectStore('dataPoints')
-        .index('transmitted')
+        countRequest.onsuccess = () => {
+          console.log(`[rex-passive-data-kit] Remaining data points: ${countRequest.result}`)
 
-      const countRequest = index.count(0)
+          const request = index.getAll(0, 64)
 
-      countRequest.onsuccess = () => {
-        console.log(`[rex-passive-data-kit] Remaining data points: ${countRequest.result}`)
+          request.onsuccess = () => {
+            const pendingItems = request.result
 
-        const request = index.getAll(0, 64)
+            if (pendingItems.length === 0) {
+              this.currentlyUploading = false
 
-        request.onsuccess = () => {
-          const pendingItems = request.result
+              resolve()
+            } else {
+              const toTransmit = []
+              const xmitBundle = []
 
-          if (pendingItems.length === 0) {
-            this.currentlyUploading = false
+              const pendingRemaining = pendingItems.length
 
-            resolve()
-          } else {
-            const toTransmit = []
-            const xmitBundle = []
+              console.log(`[rex-passive-data-kit] Remaining data points (this bundle): ${pendingRemaining}`)
 
-            const pendingRemaining = pendingItems.length
+              progressCallback(pendingRemaining)
 
-            console.log(`[rex-passive-data-kit] Remaining data points (this bundle): ${pendingRemaining}`)
+              let bundleLength = 0
 
-            progressCallback(pendingRemaining)
+              for (let i = 0; i < pendingRemaining && bundleLength < (128 * 1024); i++) {
+                const pendingItem = pendingItems[i]
 
-            let bundleLength = 0
+                pendingItem.transmitted = new Date().getTime()
 
-            for (let i = 0; i < pendingRemaining && bundleLength < (128 * 1024); i++) {
-              const pendingItem = pendingItems[i]
+                pendingItem.dataPoint.date = pendingItem.date
+                pendingItem.dataPoint.generatorId = pendingItem.generatorId
 
-              pendingItem.transmitted = new Date().getTime()
+                toTransmit.push(pendingItem)
+                xmitBundle.push(pendingItem.dataPoint)
 
-              pendingItem.dataPoint.date = pendingItem.date
-              pendingItem.dataPoint.generatorId = pendingItem.generatorId
+                const bundleString = JSON.stringify(pendingItem.dataPoint)
 
-              toTransmit.push(pendingItem)
-              xmitBundle.push(pendingItem.dataPoint)
+                bundleLength += bundleString.length
+              }
 
-              const bundleString = JSON.stringify(pendingItem.dataPoint)
+              const status = {
+                pending_points: pendingRemaining,
+                generatorId: 'pdk-system-status'
+              }
 
-              bundleLength += bundleString.length
+              chrome.system.cpu.getInfo()
+                .then((cpuInfo) => {
+                  status['cpu-info'] = cpuInfo
+
+                  return chrome.system.display.getInfo()
+                })
+                .then((displayUnitInfo) => {
+                  status['display-info'] = displayUnitInfo
+
+                  return chrome.system.memory.getInfo()
+                })
+                .then((memoryInfo) => {
+                  status['memory-info'] = memoryInfo
+
+                  return chrome.system.storage.getInfo()
+                })
+                .then((storageUnitInfo) => {
+                  status['storage-info'] = storageUnitInfo
+
+                  xmitBundle.push(status)
+
+                  if (toTransmit.length === 0) {
+                    this.currentlyUploading = false
+
+                    resolve()
+                  } else {
+                    this.uploadBundle(xmitBundle)
+                      .then(() => {
+                        return this.updateDataPoints(toTransmit)
+                      })
+                      .then(() => {
+                        this.currentlyUploading = false
+
+                        return this.uploadQueuedDataPoints(progressCallback)
+                      })
+                      .catch((error) => {
+                        console.log('[rex-passive-data-kit] PDK upload error:')
+                        console.log(error)
+
+                        reject(`Error uploading data points: ${error}`)
+                      })
+                  }
+                })
             }
+          }
 
-            const status = {
-              pending_points: pendingRemaining,
-              generatorId: 'pdk-system-status'
-            }
+          request.onerror = (event) => {
+            console.log('[rex-passive-data-kit] PDK database error')
+            console.log(event)
 
-            chrome.system.cpu.getInfo()
-              .then((cpuInfo) => {
-                status['cpu-info'] = cpuInfo
-
-                return chrome.system.display.getInfo()
-              })
-              .then((displayUnitInfo) => {
-                status['display-info'] = displayUnitInfo
-
-                return chrome.system.memory.getInfo()
-              })
-              .then((memoryInfo) => {
-                status['memory-info'] = memoryInfo
-
-                return chrome.system.storage.getInfo()
-              })
-              .then((storageUnitInfo) => {
-                status['storage-info'] = storageUnitInfo
-
-                xmitBundle.push(status)
-
-                if (toTransmit.length === 0) {
-                  this.currentlyUploading = false
-
-                  resolve()
-                } else {
-                  this.uploadBundle(xmitBundle)
-                    .then(() => {
-                      return this.updateDataPoints(toTransmit)
-                    })
-                    .then(() => {
-                      this.currentlyUploading = false
-
-                      return this.uploadQueuedDataPoints(progressCallback)
-                    })
-                }
-              })
+            reject(`Database error: ${event}`)
           }
         }
 
-        request.onerror = (event) => {
+        countRequest.onerror = (event) => {
           console.log('[rex-passive-data-kit] PDK database error')
           console.log(event)
-          reject(event)
-        }
-      }
 
-      countRequest.onerror = (event) => {
-        console.log('[rex-passive-data-kit] PDK database error')
-        console.log(event)
-        reject(event)
+          reject(`Database error: ${event}`)
+        }
       }
     })
   }
