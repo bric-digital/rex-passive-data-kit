@@ -365,7 +365,10 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                 return chrome.system.storage.getInfo()
               })
               .then((storageUnitInfo) => {
-                status['storage-info'] = storageUnitInfo
+                status['storage-info'] = storageUnitInfo.map((unit) => ({
+                  ...unit,
+                  name: typeof unit.name === 'string' ? unit.name.replace(/\0/g, '') : unit.name
+                }))
 
                 xmitBundle.push(status)
 
