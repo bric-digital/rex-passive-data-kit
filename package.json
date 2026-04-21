@@ -38,7 +38,7 @@
         "@playwright/test": "^1.58.0",
         "@types/jquery": "^3.5.33",
         "chrome-types": "^0.1.415",
-        "esbuild": "^0.27.2",
+        "esbuild": "^0.28.0",
         "eslint": "^9.39.2",
         "globals": "^17.3.0",
         "jiti": "^2.6.1",
