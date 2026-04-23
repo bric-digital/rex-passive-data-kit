@@ -2,25 +2,31 @@
 import * as nacl from "tweetnacl";
 import * as naclUtil from "tweetnacl-util";
 
-import { REXConfiguration } from '@bric/rex-core/extension'
+import { REXConfiguration } from '@bric/rex-core/common'
 import { REXContentProcessorManager } from '@bric/rex-content-processing/library'
 import rexCorePlugin, { REXServiceWorkerModule, registerREXModule } from '@bric/rex-core/service-worker'
-import { error } from "jquery";
 
 const PDK_DATABASE_VERSION = 1
+
+export interface REXPDKDataPointDBRecord {
+  generatorId:string,
+  dataPoint:any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  transmitted:number,
+  date?:number
+}
 
 class PassiveDataKitModule extends REXServiceWorkerModule {
   uploadUrl:string = ''
   serverKey:string = ''
-  serverFieldKey:Uint8Array<ArrayBufferLike>
-  localFieldKey:Uint8Array<ArrayBufferLike>
+  serverFieldKey:Uint8Array<ArrayBufferLike>|null = null
+  localFieldKey:Uint8Array<ArrayBufferLike>|null = null
 
   identifier:string = 'unknown-id'
 
   alarmCreated:boolean = true
 
-  database = null
-  queuedPoints = []
+  database:IDBDatabase|null = null
+  queuedPoints:REXPDKDataPointDBRecord[] = []
   lastPersisted = 0
 
   currentlyUploading:boolean = false
@@ -166,28 +172,30 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       let pointsSaved = 0
 
       const storePoint = () => {
-        if (this.queuedPoints.length === 0) {
+        if (this.queuedPoints.length === 0 || this.database === null) {
           resolve(pointsSaved)
         } else {
           const objectStore = this.database.transaction(['dataPoints'], 'readwrite').objectStore('dataPoints')
 
-          const point = this.queuedPoints.pop()
+          const point:REXPDKDataPointDBRecord|undefined = this.queuedPoints.pop()
 
-          const request = objectStore.add(point)
+          if (point !== undefined) {
+            const request = objectStore.add(point)
 
-          request.onsuccess = function (event) { // eslint-disable-line @typescript-eslint/no-unused-vars
-            console.log(`[rex-passive-data-kit] Data point saved successfully: ${point.generatorId}.`)
+            request.onsuccess = function (event) { // eslint-disable-line @typescript-eslint/no-unused-vars
+              console.log(`[rex-passive-data-kit] Data point saved successfully: ${point.generatorId}.`)
 
-            pointsSaved += 1
+              pointsSaved += 1
 
-            storePoint()
-          }
+              storePoint()
+            }
 
-          request.onerror = function (event) {
-            console.log(`[rex-passive-data-kit] Data point enqueuing failed: ${point.generatorId}.`)
-            console.log(event)
+            request.onerror = function (event) {
+              console.log(`[rex-passive-data-kit] Data point enqueuing failed: ${point.generatorId}.`)
+              console.log(event)
 
-            resolve(pointsSaved)
+              resolve(pointsSaved)
+            }
           }
         }
       }
@@ -270,7 +278,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
   async updateDataPoints(dataPoints) {
     return new Promise<void>((resolve, reject) => {
-      if (dataPoints.length === 0) {
+      if (dataPoints.length === 0 || this.database === null) {
         resolve()
       } else {
         const dataPoint = dataPoints.pop()
@@ -283,9 +291,9 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
           this.updateDataPoints(dataPoints)
         }
 
-        request.onerror = function (event) {
+        request.onerror = (error) => {
           console.log('[rex-passive-data-kit] The data update has has failed.')
-          console.log(event)
+          console.log(error)
 
           reject(error)
         }
@@ -312,15 +320,15 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
           const request = index.getAll(0, 64)
 
           request.onsuccess = () => {
-            const pendingItems = request.result
+            const pendingItems:REXPDKDataPointDBRecord[] = request.result
 
             if (pendingItems.length === 0) {
               this.currentlyUploading = false
 
               resolve()
             } else {
-              const toTransmit = []
-              const xmitBundle = []
+              const toTransmit:REXPDKDataPointDBRecord[] = []
+              const xmitBundle:any[] = [] // eslint-disable-line @typescript-eslint/no-explicit-any
 
               const pendingRemaining = pendingItems.length
 
@@ -331,7 +339,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
               let bundleLength = 0
 
               for (let i = 0; i < pendingRemaining && bundleLength < (128 * 1024); i++) {
-                const pendingItem = pendingItems[i]
+                const pendingItem:REXPDKDataPointDBRecord = pendingItems[i]
 
                 pendingItem.transmitted = new Date().getTime()
 
@@ -416,14 +424,14 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   }
 
   encryptFields(payload) {
-    if ([this.serverFieldKey, this.localFieldKey].includes(undefined)) {
+    if (this.serverFieldKey === null || this.localFieldKey === null) {
       return
     }
 
     for (const itemKey in payload) {
       const value = payload[itemKey]
 
-      const toRemove = []
+      const toRemove:string[] = []
 
       if (itemKey.endsWith('*')) {
         const originalValue = '' + value
@@ -448,7 +456,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       } else if (value != null && value.constructor.name === 'Object') {
         this.encryptFields(value)
       } else if (value != null && Array.isArray(value)) {
-        value.forEach(function (valueItem) {
+        value.forEach((valueItem) => {
           if (valueItem.constructor.name === 'Object') {
             this.encryptFields(valueItem)
           }

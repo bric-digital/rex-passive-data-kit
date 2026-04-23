@@ -1,10 +1,10 @@
-import { REXConfiguration } from '@bric/rex-core/extension'
+import { REXConfiguration } from '@bric/rex-core/common'
 
 import { REXClientModule, registerREXModule } from '@bric/rex-core/browser'
 
 class PassiveDataKitModule extends REXClientModule {
-  configuration: object
-  refreshTimeout: number = 0
+  configuration:object|null = null
+  refreshTimeout:number = 0
 
   constructor() {
     super()
@@ -25,7 +25,7 @@ class PassiveDataKitModule extends REXClientModule {
   applyConfiguration() {
     console.log('PassiveDataKitModule.applyConfiguration')
 
-    if ([null, undefined].includes(this.configuration)) {
+    if (this.configuration == null) {
       return
     }
 
