@@ -254,7 +254,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             mode: 'cors', // no-cors, *cors, same-origin
             cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-PDK-IDENTIFIER': this.identifier
             },
             redirect: 'follow', // manual, *follow, error
             referrerPolicy: 'no-referrer', // no-referrer, *no-referrer-when-downgrade, origin, origin-when-cross-origin, same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
@@ -410,6 +411,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             console.log(event)
 
             reject(`Database error: ${event}`)
+
           }
         }
 
