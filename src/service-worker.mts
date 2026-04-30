@@ -1,6 +1,8 @@
 
-import * as nacl from "tweetnacl";
-import * as naclUtil from "tweetnacl-util";
+import * as nacl from 'tweetnacl'
+import * as naclUtil from 'tweetnacl-util'
+
+import stringify from 'json-stable-stringify'
 
 import { REXConfiguration } from '@bric/rex-core/common'
 import { REXContentProcessorManager } from '@bric/rex-content-processing/library'
@@ -8,32 +10,81 @@ import rexCorePlugin, { REXServiceWorkerModule, registerREXModule } from '@bric/
 
 const PDK_DATABASE_VERSION = 1
 
+export interface REXPDKPointMetadata {
+  source: string,
+  generator: string,
+  'generator-id': string,
+  timestamp: number,
+  timezone: string,
+  'configuration-hash'?: string,
+}
+
+export interface REXPDKDataPoint {
+  date?: number,
+  [key: string]: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  'passive-data-metadata'?: REXPDKPointMetadata
+  configurationHash?: string,
+}
+
 export interface REXPDKDataPointDBRecord {
-  generatorId:string,
-  dataPoint:any, // eslint-disable-line @typescript-eslint/no-explicit-any
-  transmitted:number,
-  date?:number
+  generatorId: string,
+  dataPoint: REXPDKDataPoint,
+  transmitted: number,
+  date?: number,
+}
+
+export interface REXPDKStatusDataPoint {
+  'pending-points': number,
+  'generatorId': 'pdk-system-status',
+  'cpu-info'?: chrome.system.cpu.CpuInfo,
+  'display-info'?: chrome.system.display.DisplayUnitInfo[],
+  'memory-info'?: chrome.system.memory.MemoryInfo,
+  'storage-info'?: chrome.system.storage.StorageUnitInfo[],
+  configurationHash?: string,
+}
+
+export interface REXPDKConfiguration {
+  endpoint: string,
+  identifier: string,
+  field_key?: string,
+}
+
+export interface REXPDKEvent {
+  name: string;
+  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+export class PassiveDataKitPointAnnotator {
+  annotate(dataPoint:REXPDKDataPoint):Promise<void> { // eslint-disable-line @typescript-eslint/no-unused-vars
+    return new Promise<void>((resolve) => {
+      // Intentionally does nothing - subclass 
+
+      resolve()
+    })
+  }
+
+  toString():string {
+    return 'PassiveDataKitPointAnnotator'
+  }
 }
 
 class PassiveDataKitModule extends REXServiceWorkerModule {
-  uploadUrl:string = ''
-  serverKey:string = ''
-  serverFieldKey:Uint8Array<ArrayBufferLike>|null = null
-  localFieldKey:Uint8Array<ArrayBufferLike>|null = null
+  uploadUrl: string = ''
+  serverKey: string = ''
+  serverFieldKey: Uint8Array<ArrayBufferLike> | null = null
+  localFieldKey: Uint8Array<ArrayBufferLike> | null = null
 
-  identifier:string = 'unknown-id'
+  dataPointAnnotators:PassiveDataKitPointAnnotator[] = []
 
-  alarmCreated:boolean = true
+  identifier: string = 'unknown-id'
 
-  database:IDBDatabase|null = null
-  queuedPoints:REXPDKDataPointDBRecord[] = []
+  alarmCreated: boolean = true
+
+  database: IDBDatabase | null = null
+  queuedPoints: REXPDKDataPointDBRecord[] = []
   lastPersisted = 0
 
-  currentlyUploading:boolean = false
-
-  constructor() {
-    super()
-  }
+  currentlyUploading: boolean = false
 
   moduleName() {
     return 'PassiveDataKitModule'
@@ -75,44 +126,50 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     this.refreshConfiguration()
   }
 
-  updateConfiguration(config) {
+  registerDataPointAnnotator(annotator:PassiveDataKitPointAnnotator):void {
+    this.dataPointAnnotators.push(annotator)
+  }
+
+  updateConfiguration(config: REXPDKConfiguration) {
     this.uploadUrl = config['endpoint']
     this.identifier = config['identifier']
 
     const fieldKey = config['field_key']
 
-    if (['', undefined, null].includes(fieldKey) === false) {
-      const keyPair = nacl.box.keyPair()
+    if (fieldKey !== undefined) {
+      if (['', undefined, null].includes(fieldKey) === false) {
+        const keyPair = nacl.box.keyPair()
 
-      this.serverFieldKey = naclUtil.decodeBase64(fieldKey)
-      this.localFieldKey = keyPair.secretKey
+        this.serverFieldKey = naclUtil.decodeBase64(fieldKey)
+        this.localFieldKey = keyPair.secretKey
+      }
     }
   }
 
-  blobToB64(data) {
-    return btoa(new Uint8Array(data).reduce((data, byte) =>
-      data + String.fromCharCode(byte),
-      ''))
+  blobToB64(iterableData: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+    return btoa(new Uint8Array(iterableData).reduce((data, byte) => data + String.fromCharCode(byte), ''))
   }
 
   refreshConfiguration() {
     rexCorePlugin.fetchConfiguration()
-      .then((configuration:REXConfiguration) => {
+      .then((configuration: REXConfiguration) => {
         if (configuration !== undefined) {
-          const passiveDataKitConfig = configuration['passive_data_kit']
+          const passiveDataKitConfig: REXPDKConfiguration = (configuration as any)['passive_data_kit'] // eslint-disable-line @typescript-eslint/no-explicit-any
 
           if (passiveDataKitConfig !== undefined) {
             this.updateConfiguration(passiveDataKitConfig)
 
-            this.uploadQueuedDataPoints((remaining) => {
+            this.uploadQueuedDataPoints((remaining: number) => {
               console.log(`[rex-passive-data-kit] ${remaining} data points to upload...`)
             })
-              .then(() => {
-                console.log(`[rex-passive-data-kit] Upload complete.`)
-              })
-              .catch((error) => {
-                console.log(`[rex-passive-data-kit] Upload error: ${error}`)
-              })
+            .then((response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+              console.log(`[rex-passive-data-kit] Upload complete.`)
+            }, (error) => {
+              console.log(`[rex-passive-data-kit] Upload error[0]: ${error}`)
+            })
+            .catch((error) => {
+              console.log(`[rex-passive-data-kit] Upload error[1]: ${error}`)
+            })
 
             return
           }
@@ -124,7 +181,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       })
   }
 
-  logEvent(event:object) {
+  logEvent(event: REXPDKEvent) {
     if (event !== undefined) {
       if (['', null, undefined].includes(event['name']) == false) {
         console.log('[rex-passive-data-kit] Enqueue data point for logging:')
@@ -138,34 +195,63 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     }
   }
 
-  enqueueDataPoint(generatorId, dataPoint) {
-    if (generatorId === null || dataPoint === null) {
-      // pass
-    } else {
-      const payload = {
-        generatorId,
-        dataPoint,
-        transmitted: 0
-      }
+  enqueueDataPoint(generatorId: string, dataPoint: REXPDKDataPoint) {
+    rexCorePlugin.fetchConfiguration()
+      .then((configuration: REXConfiguration) => {
+          this.normalizeConfiguration(configuration)
 
-      if (dataPoint.date !== undefined) {
-        payload['date'] = dataPoint.date
-      } else {
-        payload['date'] = Date.now()
-      }
+          if (generatorId === null || dataPoint === null) {
+            // pass
+          } else {
+            const payload:REXPDKDataPointDBRecord = {
+              generatorId,
+              dataPoint,
+              transmitted: 0
+            }
 
-      this.queuedPoints.push(payload)
-    }
+            if (dataPoint.date !== undefined) {
+              let dateObj = (dataPoint.date as any) // eslint-disable-line @typescript-eslint/no-explicit-any
 
-    if (this.queuedPoints.length > 0 && (Date.now() - this.lastPersisted) > 1000) {
-      this.persistDataPoints()
-        .then((pointsSaved) => {
-          console.log(`[rex-passive-data-kit] ${pointsSaved} points saved successfully.`)
+              if (dateObj instanceof Date) {
+                dateObj = dateObj.getTime()
+              }
+              
+              payload.date = dateObj
+            } else {
+              payload.date = Date.now()
+            }
+
+            const persistPoint = (payload:REXPDKDataPointDBRecord) => {
+              this.annotateDataPoint(payload.dataPoint)
+                .then(() => {
+                  this.queuedPoints.push(payload)
+
+                  if (this.queuedPoints.length > 0 && (Date.now() - this.lastPersisted) > 1000) {
+                    this.persistDataPoints()
+                      .then((pointsSaved: number) => {
+                        console.log(`[rex-passive-data-kit] ${pointsSaved} points saved successfully.`)
+                    })
+                  }
+                })
+            }
+
+            const configString = stringify(configuration)
+
+            if (configString !== undefined) {
+              rexCorePlugin.generateHash(configString)
+              .then((configHash) => {
+                payload.dataPoint.configurationHash = `${configHash}`
+
+                persistPoint(payload)
+              })
+            } else {
+                persistPoint(payload)
+            }
+          }
         })
-    }
   }
 
-  async persistDataPoints () {
+  async persistDataPoints() {
     return new Promise<number>((resolve) => {
       this.lastPersisted = Date.now()
 
@@ -177,7 +263,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         } else {
           const objectStore = this.database.transaction(['dataPoints'], 'readwrite').objectStore('dataPoints')
 
-          const point:REXPDKDataPointDBRecord|undefined = this.queuedPoints.pop()
+          const point: REXPDKDataPointDBRecord | undefined = this.queuedPoints.pop()
 
           if (point !== undefined) {
             const request = objectStore.add(point)
@@ -204,8 +290,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     })
   }
 
-  async uploadBundle(points) {
-    return new Promise<void>((resolve, reject) => {
+  async uploadBundle(points:REXPDKDataPoint[]) {
+    return new Promise<any>((resolve, reject) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       const manifest = chrome.runtime.getManifest()
 
       const keyPair = nacl.box.keyPair() // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -215,18 +301,31 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       const userAgent = manifest.name + '/' + manifest.version + ' ' + navigator.userAgent
 
       for (let i = 0; i < points.length; i++) {
-        const metadata = {}
+        let pointDate:number|undefined = points[i].date
+
+        if (pointDate === undefined) {
+          pointDate = Date.now()
+        }
+
+        const metadata: REXPDKPointMetadata = {
+          source: `${this.identifier}`,
+          generator: points[i].generatorId + ': ' + userAgent,
+          'generator-id': points[i].generatorId,
+          timestamp: pointDate / 1000,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }
+
+        if (points[i].configurationHash !== undefined) {
+          metadata['configuration-hash'] = points[i].configurationHash
+
+          delete points[i].configurationHash
+        }
 
         if (points[i].date === undefined) {
           points[i].date = (new Date()).getTime()
         }
 
-        metadata['source'] = this.identifier
-        metadata['generator'] = points[i].generatorId + ': ' + userAgent
-        metadata['generator-id'] = points[i].generatorId
-        metadata['timestamp'] = points[i].date / 1000 // Unix timestamp
         // metadata['generated-key'] = nacl.util.encodeBase64(keyPair.publicKey)
-        metadata['timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone
 
         points[i]['passive-data-metadata'] = metadata
 
@@ -264,9 +363,14 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
               payload: compressedBase64
             })
           }) // body data type must match "Content-Type" header
-            .then(response => response.json())
-            .then(function (data) {// eslint-disable-line @typescript-eslint/no-unused-vars
-              resolve()
+            .then((response) => {
+              response.json().then((reply) => {
+                if (response.ok) {
+                  resolve(reply)
+                } else {
+                  reject(reply)
+                }
+              })
             })
             .catch((error) => {
               console.error('Error:', error)
@@ -277,33 +381,37 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     })
   }
 
-  async updateDataPoints(dataPoints) {
+  updateDataPoints(dataPoints: REXPDKDataPointDBRecord[]) {
     return new Promise<void>((resolve, reject) => {
       if (dataPoints.length === 0 || this.database === null) {
         resolve()
       } else {
-        const dataPoint = dataPoints.pop()
+        const dataPoint: REXPDKDataPointDBRecord | undefined = dataPoints.pop()
 
-        const request = this.database.transaction(['dataPoints'], 'readwrite')
-          .objectStore('dataPoints')
-          .put(dataPoint)
+        if (dataPoint !== undefined) {
+          const request = this.database.transaction(['dataPoints'], 'readwrite')
+            .objectStore('dataPoints')
+            .put(dataPoint)
 
-        request.onsuccess = (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-          this.updateDataPoints(dataPoints)
+          request.onsuccess = (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+            this.updateDataPoints(dataPoints)
+          }
+
+          request.onerror = (error) => {
+            console.log('[rex-passive-data-kit] The data update has has failed.')
+            console.log(error)
+
+            reject(error)
+          }
         }
 
-        request.onerror = (error) => {
-          console.log('[rex-passive-data-kit] The data update has has failed.')
-          console.log(error)
-
-          reject(error)
-        }
+        resolve()
       }
     })
   }
 
-  async uploadQueuedDataPoints (progressCallback) {
-    return new Promise<void>((resolve, reject) => {
+  async uploadQueuedDataPoints(progressCallback: any, responses:any[] = []) { // eslint-disable-line @typescript-eslint/no-explicit-any
+    return new Promise<any>((resolveUploadQueued, reject) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       if (this.currentlyUploading) {
         reject('Still uploading data points. Skipping...')
       } else if (this.database === null) {
@@ -321,15 +429,15 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
           const request = index.getAll(0, 64)
 
           request.onsuccess = () => {
-            const pendingItems:REXPDKDataPointDBRecord[] = request.result
+            const pendingItems: REXPDKDataPointDBRecord[] = request.result
 
             if (pendingItems.length === 0) {
               this.currentlyUploading = false
 
-              resolve()
+              resolveUploadQueued(responses)
             } else {
-              const toTransmit:REXPDKDataPointDBRecord[] = []
-              const xmitBundle:any[] = [] // eslint-disable-line @typescript-eslint/no-explicit-any
+              const toTransmit: REXPDKDataPointDBRecord[] = []
+              const xmitBundle: REXPDKDataPoint[] = []
 
               const pendingRemaining = pendingItems.length
 
@@ -340,7 +448,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
               let bundleLength = 0
 
               for (let i = 0; i < pendingRemaining && bundleLength < (128 * 1024); i++) {
-                const pendingItem:REXPDKDataPointDBRecord = pendingItems[i]
+                const pendingItem: REXPDKDataPointDBRecord = pendingItems[i]
 
                 pendingItem.transmitted = new Date().getTime()
 
@@ -355,68 +463,146 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                 bundleLength += bundleString.length
               }
 
-              const status = {
-                pending_points: pendingRemaining,
+              const status: REXPDKStatusDataPoint = {
+                'pending-points': pendingRemaining,
                 generatorId: 'pdk-system-status'
               }
 
-              chrome.system.cpu.getInfo()
-                .then((cpuInfo) => {
-                  status['cpu-info'] = cpuInfo
+              const transmitPromise = new Promise<void>((resolveStatus) => {
+                const pending:string[] = []
 
-                  return chrome.system.display.getInfo()
-                })
-                .then((displayUnitInfo) => {
-                  status['display-info'] = displayUnitInfo
+                const markResolved = function(token: string) {
+                  const tokenIndex = pending.indexOf(token)
 
-                  return chrome.system.memory.getInfo()
-                })
-                .then((memoryInfo) => {
-                  status['memory-info'] = memoryInfo
+                  if (tokenIndex >= 0) {
+                    pending.splice(tokenIndex, 1)
+                  }
 
-                  return chrome.system.storage.getInfo()
-                })
-                .then((storageUnitInfo) => {
-                  status['storage-info'] = storageUnitInfo
+                  if (pending.length === 0) {
+                    resolveStatus()
+                  }
+                }
 
-                  xmitBundle.push(status)
+                pending.push('pdk-annotate')
 
-                  if (toTransmit.length === 0) {
-                    this.currentlyUploading = false
+                this.annotateDataPoint(status)
+                  .then(() => {
+                    markResolved('pdk-annotate')
+                  })
 
-                    resolve()
+                pending.push('config-hash')
+
+                rexCorePlugin.fetchConfiguration().then((configuration: REXConfiguration) => {
+                  this.normalizeConfiguration(configuration)
+
+                  const configString = stringify(configuration)
+
+                  if (configString !== undefined) {
+                    rexCorePlugin.generateHash(configString)
+                    .then((configHash) => {
+                      status.configurationHash = `${configHash}`
+
+                      markResolved('config-hash')
+                    })
                   } else {
-                    this.uploadBundle(xmitBundle)
-                      .then(() => {
-                        return this.updateDataPoints(toTransmit)
-                      })
-                      .then(() => {
-                        this.currentlyUploading = false
-
-                        return this.uploadQueuedDataPoints(progressCallback)
-                      })
-                      .catch((error) => {
-                        console.log('[rex-passive-data-kit] PDK upload error:')
-                        console.log(error)
-
-                        reject(`Error uploading data points: ${error}`)
-                      })
+                    markResolved('config-hash')
                   }
                 })
+
+                if (chrome.system !== undefined) {
+                  if (chrome.system.cpu !== undefined) {
+                    pending.push('cpu-info')
+
+                    chrome.system.cpu.getInfo().then((cpuInfo: chrome.system.cpu.CpuInfo) => {
+                      status['cpu-info'] = cpuInfo
+
+                      markResolved('cpu-info')
+                    })
+                  }
+
+                  if (chrome.system.display !== undefined) {
+                    pending.push('display-info')
+
+                    chrome.system.display.getInfo().then((displayUnitInfo: chrome.system.display.DisplayUnitInfo[]) => {
+                      status['display-info'] = displayUnitInfo
+
+                      markResolved('display-info')
+                    })
+                  }
+
+                  if (chrome.system.memory !== undefined) {
+                    pending.push('memory-info')
+
+                    chrome.system.memory.getInfo().then((memoryInfo: chrome.system.memory.MemoryInfo) => {
+                      status['memory-info'] = memoryInfo
+
+                      markResolved('memory-info')
+                    })
+                  }
+
+                  if (chrome.system.storage !== undefined) {
+                    pending.push('storage-info')
+
+                    chrome.system.storage.getInfo().then((storageUnitInfo: chrome.system.storage.StorageUnitInfo[]) => {
+                      status['storage-info'] = storageUnitInfo
+
+                      markResolved('storage-info')
+                    })
+                  }
+                } else {
+                  markResolved('finish')
+                }
+              })
+              
+              transmitPromise.then(() => {
+                xmitBundle.push(status)
+
+                if (toTransmit.length === 0) {
+                  this.currentlyUploading = false
+
+                  responses.push('after-transit')
+
+                  resolveUploadQueued(responses)
+                } else {
+                  this.uploadBundle(xmitBundle)
+                    .then((responseData) => {
+                      responses.push(responseData)
+
+                      this.updateDataPoints(toTransmit).then(() => {
+                        this.currentlyUploading = false
+
+                        this.uploadQueuedDataPoints(progressCallback, responses).then((promiseResponses) => {
+                          resolveUploadQueued(promiseResponses)
+                        })
+                      })
+                    }, (error) => {
+                      this.currentlyUploading = false
+
+                      reject(error)
+                    })
+                    .catch((error) => {
+                      this.currentlyUploading = false
+
+                      console.log('[rex-passive-data-kit] PDK upload error:')
+                      console.log(error)
+
+                      reject(`Error uploading data points: ${error}`)
+                    })
+                }
+              })
             }
           }
 
           request.onerror = (event) => {
-            console.log('[rex-passive-data-kit] PDK database error')
+            console.log('[rex-passive-data-kit] PDK database error. Unable to retrieve pending points.')
             console.log(event)
 
             reject(`Database error: ${event}`)
-
           }
         }
 
         countRequest.onerror = (event) => {
-          console.log('[rex-passive-data-kit] PDK database error')
+          console.log('[rex-passive-data-kit] PDK database error. Unable to retrieve count of pending points.')
           console.log(event)
 
           reject(`Database error: ${event}`)
@@ -425,7 +611,31 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     })
   }
 
-  encryptFields(payload) {
+  annotateDataPoint(dataPoint:REXPDKDataPoint) {
+    const pending = [...this.dataPointAnnotators]
+    
+    return new Promise<void>((resolve) => {
+      const nextAnnotation = () => {
+        if (pending.length == 0) {
+          resolve()
+        } else {
+          const next = pending.pop()
+
+          if (next !== undefined) {
+            next.annotate(dataPoint).then(() => {
+              nextAnnotation()
+            })
+          } else {
+            resolve()
+          }
+        }
+      }
+
+      nextAnnotation()
+    })
+  }
+
+  encryptFields(payload:any) { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (this.serverFieldKey === null || this.localFieldKey === null) {
       return
     }
@@ -433,7 +643,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     for (const itemKey in payload) {
       const value = payload[itemKey]
 
-      const toRemove:string[] = []
+      const toRemove: string[] = []
 
       if (itemKey.endsWith('*')) {
         const originalValue = '' + value
@@ -463,6 +673,14 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             this.encryptFields(valueItem)
           }
         })
+      }
+    }
+  }
+
+  normalizeConfiguration(configuration:REXConfiguration) {
+    if (configuration['passive_data_kit'] !== undefined) {
+      if (configuration['passive_data_kit'].identifier !== undefined) {
+        delete configuration['passive_data_kit'].identifier
       }
     }
   }

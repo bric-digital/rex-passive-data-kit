@@ -31,11 +31,15 @@
         "test:debug": "playwright test --debug",
         "test:headed": "playwright test --headed",
         "test:ui": "playwright test --ui",
-        "test:unit": "playwright test specs/"
+        "test:unit": "playwright test specs/",
+        "server": "node tests/scripts/run-server.js"
     },
     "dependencies": {
         "@bric/rex-content-processing": "github:bric-digital/rex-content-processing",
         "@bric/rex-core": "github:bric-digital/rex-core",
+        "express": "^5.2.1",
+        "json-stable-stringify": "^1.3.0",
+        "multer": "^2.1.1",
         "tweetnacl": "^1.0.3",
         "tweetnacl-util": "^0.15.1"
     }

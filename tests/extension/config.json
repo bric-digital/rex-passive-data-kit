@@ -1,0 +1,17 @@
+{
+    "configuration_url": "config.json",
+    "passive_data_kit": {
+        "identifier": "rex-pdk",
+        "enabled": true,
+        "debug": true,
+        "endpoint": "http://localhost:3000/data/add-bundle.json"
+    },
+    "testing": {
+        "test-field": "hello world"
+    },
+    "ui": [{
+        "title": "REX Headers Module Testing Extension",
+        "identifier": "main",
+        "default": true
+    }]
+}
