@@ -385,27 +385,29 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     return new Promise<void>((resolve, reject) => {
       if (dataPoints.length === 0 || this.database === null) {
         resolve()
-      } else {
-        const dataPoint: REXPDKDataPointDBRecord | undefined = dataPoints.pop()
+        return
+      }
 
-        if (dataPoint !== undefined) {
-          const request = this.database.transaction(['dataPoints'], 'readwrite')
-            .objectStore('dataPoints')
-            .put(dataPoint)
+      const dataPoint: REXPDKDataPointDBRecord | undefined = dataPoints.pop()
 
-          request.onsuccess = (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-            this.updateDataPoints(dataPoints)
-          }
-
-          request.onerror = (error) => {
-            console.log('[rex-passive-data-kit] The data update has has failed.')
-            console.log(error)
-
-            reject(error)
-          }
-        }
-
+      if (dataPoint === undefined) {
         resolve()
+        return
+      }
+
+      const request = this.database.transaction(['dataPoints'], 'readwrite')
+        .objectStore('dataPoints')
+        .put(dataPoint)
+
+      request.onsuccess = (event) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+        this.updateDataPoints(dataPoints).then(resolve, reject)
+      }
+
+      request.onerror = (error) => {
+        console.log('[rex-passive-data-kit] The data update has has failed.')
+        console.log(error)
+
+        reject(error)
       }
     })
   }
