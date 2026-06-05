@@ -8,7 +8,6 @@
     "webRequest",
     "scripting",
     "declarativeNetRequest",
-    "declarativeNetRequestFeedback",
     "system.cpu",
     "system.display",
     "system.memory",
