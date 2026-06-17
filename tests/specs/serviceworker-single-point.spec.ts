@@ -9,7 +9,8 @@ test('Service worker single point transmission test', async ({serviceWorker}) =>
             self.rexCorePlugin.handleMessage({
               'messageType': 'transmitSynchronousEvent',
               'event': {
-                'name': 'rex-pdk-single-point-test'
+                'name': 'rex-pdk-single-point-test',
+                'source': 'rex-test-script'
               }
             }, this, (uploadResponse) => {
               testResolve(uploadResponse)

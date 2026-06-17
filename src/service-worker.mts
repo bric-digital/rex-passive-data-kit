@@ -622,6 +622,10 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       const generatorId = event.name
       const userAgent = manifest.name + '/' + manifest.version + ' ' + navigator.userAgent
 
+      if (this.identifier === undefined) {
+        this.identifier = event['source']
+      }
+
       const pointPayload:REXPDKDataPoint = {
         'passive-data-metadata': {
           source: `${this.identifier}`,
@@ -694,6 +698,12 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       this.annotateDataPoint(pointPayload).then(() => {
         rexCorePlugin.fetchConfiguration()
           .then((configuration: REXConfiguration) => {
+            const passiveDataKitConfig: REXPDKConfiguration = (configuration as any)['passive_data_kit'] // eslint-disable-line @typescript-eslint/no-explicit-any
+
+            if (passiveDataKitConfig !== undefined) {
+              this.updateConfiguration(passiveDataKitConfig)
+            }
+
             const configString = stringify(configuration)
 
             if (configString !== undefined) {
@@ -793,6 +803,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
   handleMessage(message:any, sender:any, sendResponse:(response:any) => void):boolean  { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (message.messageType == 'transmitSynchronousEvent') {
+      
       console.log(`[rex-passive-data-kit] transmitSynchronousEvent`)
       REXContentProcessorManager.getInstance().processContent(message.event)
         .then((processed) => {
