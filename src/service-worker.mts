@@ -706,7 +706,11 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                 transmitPoint(pointPayload)
               })
             } else {
-                transmitPoint(pointPayload)
+              if (pointPayload['passive-data-metadata'] !== undefined) {
+                pointPayload['passive-data-metadata']['configuration-hash'] = ''
+              }
+
+              transmitPoint(pointPayload)
             }
           })
       })
@@ -792,6 +796,9 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       console.log(`[rex-passive-data-kit] transmitSynchronousEvent`)
       REXContentProcessorManager.getInstance().processContent(message.event)
         .then((processed) => {
+          console.log(`[rex-passive-data-kit] transmitSynchronousEvent - processed content`)
+          console.log(processed)
+
           this.transmitDataPoint(processed).then((response) => {
             sendResponse(response)
           })
