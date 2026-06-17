@@ -635,6 +635,9 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
       Object.assign(pointPayload, event)
 
       const transmitPoint = ((dataPoint:REXPDKDataPoint) => {
+        console.log(`[rex-passive-data-kit]: Transmitting synchronous point (${pointUrl})...`)
+        console.log(dataPoint)
+
         fetch(pointUrl, {
           method: 'POST',
           mode: 'cors', // no-cors, *cors, same-origin
@@ -649,6 +652,9 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             payload: JSON.stringify(dataPoint)
           })
         }).then((response) => {
+          console.log(`[rex-passive-data-kit]: Response received...`)
+          console.log(response)
+
           if (response.ok) {
             response.json().then((reply) => {
               resolve({
@@ -656,7 +662,16 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                 url: pointUrl,
                 message: reply['message']
               })
-            })
+            }, (error) => {
+              console.log(`[rex-passive-data-kit] Error parsing JSON from (${pointUrl})...`)
+              console.log(error)
+            
+              resolve({
+                logged: false,
+                url: pointUrl,
+                status: `Error parsing JSON from ${pointUrl}: ${error.message}`
+              })
+            }) 
           } else {
             resolve({
               logged: false,
@@ -664,6 +679,15 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
               status: `Response status from ${pointUrl}: ${response.status}`
             })
           }
+        }, (error) => {
+          console.log(`[rex-passive-data-kit] Error connecting to (${pointUrl})...`)
+          console.log(error)
+
+          resolve({
+            logged: false,
+            url: pointUrl,
+            status: `Error connecting to ${pointUrl}: ${error.message}`
+          })
         })
       })
 
@@ -765,6 +789,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
   handleMessage(message:any, sender:any, sendResponse:(response:any) => void):boolean  { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (message.messageType == 'transmitSynchronousEvent') {
+      console.log(`[rex-passive-data-kit] transmitSynchronousEvent`)
       REXContentProcessorManager.getInstance().processContent(message.event)
         .then((processed) => {
           this.transmitDataPoint(processed).then((response) => {
