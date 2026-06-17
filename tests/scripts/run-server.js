@@ -14,14 +14,14 @@ const upload = multer()
 
 app.get('/', (request, response) => {
   response.send('The only way to pass a test is to take the test.')
-});
+})
 
 app.get('/headers', (request, response) => {
   response.statusCode = 200;
   response.setHeader('Content-Type', 'application/json')
 
   response.send(JSON.stringify(request.headers, null, '  '))
-});
+})
 
 app.post('/post', upload.none(), (request, response) => {
   response.statusCode = 200;
@@ -32,7 +32,7 @@ app.post('/post', upload.none(), (request, response) => {
   }
 
   response.send(JSON.stringify(request.body, null, '  '))
-});
+})
 
 app.post('/data/add-bundle.json', upload.none(), (request, response) => {
   response.statusCode = 200;
@@ -83,8 +83,55 @@ app.post('/data/add-bundle.json', upload.none(), (request, response) => {
   }
 
   response.send(JSON.stringify(reply, null, '  '))
-});
+})
+
+app.post('/data/add-point.json', upload.none(), (request, response) => {
+  response.statusCode = 200;
+  response.setHeader('Content-Type', 'application/json')
+
+  const dataPoint = JSON.parse(request.body.payload)
+
+  let reply = {
+    'request-headers': request.headers,
+    'request-body': request.body,
+    'post.payload': dataPoint
+  }
+
+  console.error(`/data/add-point.json: ${JSON.stringify(reply, null, '  ')}`)
+
+  const metadata = dataPoint['passive-data-metadata']
+
+  let error = null
+
+  if (metadata === undefined) {
+    error = '<passive-data-metadata> is missing.'
+  }
+
+  if (metadata.source === undefined) {
+    error = '<passive-data-metadata.source> is missing.'
+  }
+
+  if (metadata['configuration-hash'] === undefined) {
+    error = '<passive-data-metadata.configuration-hash> is missing.'
+  }
+
+  if (error !== null) {
+    console.error(`Error encountered in data point: ${error}`)
+    console.error(`/data/add-bundle.json: ${JSON.stringify(dataPoint, null, '  ')}`)
+      
+    response.statusCode = 400;
+    response.send(JSON.stringify({'error': '"passive-data-metadata.source" is missing.'}))
+
+    return
+  }
+
+  const replyMessage = {
+    message: 'Data point added successfully.'
+  }
+
+  response.send(JSON.stringify(replyMessage, null, '  '))
+})
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}...`);
-});
+})

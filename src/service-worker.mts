@@ -613,6 +613,82 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     })
   }
 
+  async transmitDataPoint(event: REXPDKEvent) {
+    return new Promise<any>((resolve) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+      const manifest = chrome.runtime.getManifest()
+
+      const pointUrl = this.uploadUrl.replaceAll('add-bundle.json', 'add-point.json') // TODO: Make configurable
+
+      const generatorId = event.name
+      const userAgent = manifest.name + '/' + manifest.version + ' ' + navigator.userAgent
+
+      const pointPayload:REXPDKDataPoint = {
+        'passive-data-metadata': {
+          source: `${this.identifier}`,
+          generator: generatorId + ': ' + userAgent,
+          'generator-id': generatorId,
+          timestamp: Date.now() / 1000,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }
+      }
+
+      Object.assign(pointPayload, event)
+
+      const transmitPoint = ((dataPoint:REXPDKDataPoint) => {
+        fetch(pointUrl, {
+          method: 'POST',
+          mode: 'cors', // no-cors, *cors, same-origin
+          cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-PDK-IDENTIFIER': this.identifier
+          },
+          redirect: 'follow', // manual, *follow, error
+          referrerPolicy: 'no-referrer', // no-referrer, *no-referrer-when-downgrade, origin, origin-when-cross-origin, same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
+          body: new URLSearchParams({
+            payload: JSON.stringify(dataPoint)
+          })
+        }).then((response) => {
+          if (response.ok) {
+            response.json().then((reply) => {
+              resolve({
+                logged: true,
+                url: pointUrl,
+                message: reply['message']
+              })
+            })
+          } else {
+            resolve({
+              logged: false,
+              url: pointUrl,
+              status: `Response status from ${pointUrl}: ${response.status}`
+            })
+          }
+        })
+      })
+
+      this.annotateDataPoint(pointPayload).then(() => {
+        rexCorePlugin.fetchConfiguration()
+          .then((configuration: REXConfiguration) => {
+            const configString = stringify(configuration)
+
+            if (configString !== undefined) {
+              rexCorePlugin.generateHash(configString)
+              .then((configHash) => {
+                if (pointPayload['passive-data-metadata'] !== undefined) {
+                  pointPayload['passive-data-metadata']['configuration-hash'] = `${configHash}`
+                }
+
+                transmitPoint(pointPayload)
+              })
+            } else {
+                transmitPoint(pointPayload)
+            }
+          })
+      })
+    })
+  }
+
   annotateDataPoint(dataPoint:REXPDKDataPoint) {
     const pending = [...this.dataPointAnnotators]
     
@@ -685,6 +761,21 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         delete configuration['passive_data_kit'].identifier
       }
     }
+  }
+
+  handleMessage(message:any, sender:any, sendResponse:(response:any) => void):boolean  { // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (message.messageType == 'transmitSynchronousEvent') {
+      REXContentProcessorManager.getInstance().processContent(message.event)
+        .then((processed) => {
+          this.transmitDataPoint(processed).then((response) => {
+            sendResponse(response)
+          })
+        })
+
+      return true
+    }
+
+    return false
   }
 }
 
