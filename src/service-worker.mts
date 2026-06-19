@@ -40,6 +40,7 @@ export interface REXPDKStatusDataPoint {
   'display-info'?: chrome.system.display.DisplayUnitInfo[],
   'memory-info'?: chrome.system.memory.MemoryInfo,
   'storage-info'?: chrome.system.storage.StorageUnitInfo[],
+  'local-storage-bytes'?: number,
   configurationHash?: string,
 }
 
@@ -549,6 +550,16 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                       status['storage-info'] = storageUnitInfo
 
                       markResolved('storage-info')
+                    })
+                  }
+
+                  if (chrome.storage.local !== undefined) {
+                    pending.push('local-storage-bytes')
+
+                    chrome.storage.local.getBytesInUse().then((bytesUsed:number) => {
+                      status['local-storage-bytes'] = bytesUsed
+
+                        markResolved('local-storage-bytes')
                     })
                   }
                 } else {
