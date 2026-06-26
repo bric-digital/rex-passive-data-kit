@@ -4,7 +4,7 @@
         "identifier": "rex-pdk",
         "enabled": true,
         "debug": true,
-        "endpoint": "http://localhost:3000/data/add-bundle.json"
+        "endpoint": "http://localhost:9090/data/add-bundle.json"
     },
     "testing": {
         "test-field": "hello world"

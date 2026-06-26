@@ -17,6 +17,7 @@ export interface REXPDKPointMetadata {
   timestamp: number,
   timezone: string,
   'configuration-hash'?: string,
+  'enqueued-at'?: number,
 }
 
 export interface REXPDKDataPoint {
@@ -24,6 +25,7 @@ export interface REXPDKDataPoint {
   [key: string]: any, // eslint-disable-line @typescript-eslint/no-explicit-any
   'passive-data-metadata'?: REXPDKPointMetadata
   configurationHash?: string,
+  enqueuedAt?: number,
 }
 
 export interface REXPDKDataPointDBRecord {
@@ -236,6 +238,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                 })
             }
 
+            payload.dataPoint.enqueuedAt = Date.now() / 1000
+
             const configString = stringify(configuration)
 
             if (configString !== undefined) {
@@ -248,6 +252,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             } else {
                 persistPoint(payload)
             }
+            
           }
         })
   }
@@ -320,6 +325,12 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
           metadata['configuration-hash'] = points[i].configurationHash
 
           delete points[i].configurationHash
+        }
+
+        if (points[i].enqueuedAt !== undefined) {
+          metadata['enqueued-at'] = points[i].enqueuedAt
+
+          delete points[i].enqueuedAt
         }
 
         if (points[i].date === undefined) {
@@ -713,6 +724,10 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
             if (passiveDataKitConfig !== undefined) {
               this.updateConfiguration(passiveDataKitConfig)
+            }
+
+            if (pointPayload['passive-data-metadata'] !== undefined) {
+              pointPayload['passive-data-metadata']['enqueued-at'] = (Date.now() / 1000)
             }
 
             const configString = stringify(configuration)
