@@ -661,6 +661,18 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         this.identifier = event['source']
       }
 
+      if (this.identifier === undefined || this.identifier === null) {
+        console.warn('[rex-passive-data-kit] Identifier not set. Skipping synchronous point transmission.')
+
+        resolve({
+          logged: false,
+          url: pointUrl,
+          status: 'Identifier not set. Skipping'
+        })
+
+        return
+      }
+
       const pointPayload:REXPDKDataPoint = {
         'passive-data-metadata': {
           source: `${this.identifier}`,
