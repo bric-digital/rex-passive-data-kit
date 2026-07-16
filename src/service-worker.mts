@@ -135,7 +135,18 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
   updateConfiguration(config: REXPDKConfiguration) {
     this.uploadUrl = config['endpoint']
-    this.identifier = config['identifier']
+    
+    if (config['identifier'] !== undefined && config['identifier'] !== null) {
+      this.identifier = config['identifier']
+    } else {
+      console.warn('[rex-passive-data-kit] Attempting to use configuration with null or undefined identifier:')
+      console.warn(config)
+    }
+
+    if (this.identifier.toLowerCase() === 'undefined') {
+      console.warn('[rex-passive-data-kit] Identifier matching the string "undefined" provided in configuration:')
+      console.warn(config)
+    }
 
     const fieldKey = config['field_key']
 
@@ -430,6 +441,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         reject('Still uploading data points. Skipping...')
       } else if (this.database === null) {
         reject('Database not yet open. Skipping')
+      } else if (this.identifier === undefined || this.identifier === null) {
+        reject('Identifier not set. Skipping')
       } else {
         const index = this.database.transaction(['dataPoints'], 'readonly')
           .objectStore('dataPoints')
