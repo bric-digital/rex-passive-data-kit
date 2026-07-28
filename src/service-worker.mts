@@ -86,7 +86,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   database: IDBDatabase | null = null
   queuedPoints: REXPDKDataPointDBRecord[] = []
   lastPersisted = 0
-  persistTimer: number | null = null
+  persistTimer: ReturnType<typeof setTimeout> | null = null
 
   currentlyUploading: boolean = false
 
