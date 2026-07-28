@@ -86,6 +86,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   database: IDBDatabase | null = null
   queuedPoints: REXPDKDataPointDBRecord[] = []
   lastPersisted = 0
+  persistTimer: ReturnType<typeof setTimeout> | null = null
 
   currentlyUploading: boolean = false
 
@@ -245,6 +246,18 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
                       .then((pointsSaved: number) => {
                         console.log(`[rex-passive-data-kit] ${pointsSaved} points saved successfully.`)
                     })
+                  } else if (this.persistTimer === null) {
+                    // A point arriving inside the throttle window has no later persist
+                    // guaranteed: if no further point ever arrives, it would sit in memory
+                    // until the service worker is suspended and be lost. Schedule one.
+                    this.persistTimer = setTimeout(() => {
+                      this.persistTimer = null
+
+                      this.persistDataPoints()
+                        .then((pointsSaved: number) => {
+                          console.log(`[rex-passive-data-kit] ${pointsSaved} points saved successfully.`)
+                      })
+                    }, 1100)
                   }
                 })
             }
@@ -270,6 +283,12 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
   async persistDataPoints() {
     return new Promise<number>((resolve) => {
+      if (this.persistTimer !== null) {
+        clearTimeout(this.persistTimer)
+
+        this.persistTimer = null
+      }
+
       this.lastPersisted = Date.now()
 
       let pointsSaved = 0
@@ -436,6 +455,10 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   }
 
   async uploadQueuedDataPoints(progressCallback: any, responses:any[] = []) { // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Points enqueued inside the persist throttle window are still in memory;
+    // persist them first so the IndexedDB read below sees everything enqueued so far.
+    await this.persistDataPoints()
+
     return new Promise<any>((resolveUploadQueued, reject) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       if (this.currentlyUploading) {
         reject('Still uploading data points. Skipping...')
