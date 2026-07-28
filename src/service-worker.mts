@@ -661,7 +661,7 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         this.identifier = event['source']
       }
 
-      if (this.identifier === undefined || this.identifier === null) {
+      if (this.identifier === undefined || this.identifier === null || this.identifier === '') {
         console.warn('[rex-passive-data-kit] Identifier not set. Skipping synchronous point transmission.')
 
         resolve({
