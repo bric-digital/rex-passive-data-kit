@@ -455,16 +455,29 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
   }
 
   async uploadQueuedDataPoints(progressCallback: any, responses:any[] = []) { // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Serialize uploads: overlapping calls (a scheduled upload plus a
+    // config-apply notification, for instance) would read the same
+    // untransmitted points and transmit them twice. The flag must be set
+    // synchronously, before any await, or two same-tick calls both pass the
+    // check. In-memory on purpose: a killed worker restarts with it clear.
+    if (this.currentlyUploading) {
+      return Promise.reject('Still uploading data points. Skipping...')
+    }
+
+    this.currentlyUploading = true
+
     // Points enqueued inside the persist throttle window are still in memory;
     // persist them first so the IndexedDB read below sees everything enqueued so far.
     await this.persistDataPoints()
 
     return new Promise<any>((resolveUploadQueued, reject) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-      if (this.currentlyUploading) {
-        reject('Still uploading data points. Skipping...')
-      } else if (this.database === null) {
+      if (this.database === null) {
+        this.currentlyUploading = false
+
         reject('Database not yet open. Skipping')
       } else if (this.identifier === undefined || this.identifier === null) {
+        this.currentlyUploading = false
+
         reject('Identifier not set. Skipping')
       } else {
         const index = this.database.transaction(['dataPoints'], 'readonly')
@@ -657,6 +670,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
             console.log('[rex-passive-data-kit] PDK database error. Unable to retrieve pending points.')
             console.log(event)
 
+            this.currentlyUploading = false
+
             reject(`Database error: ${event}`)
           }
         }
@@ -664,6 +679,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
         countRequest.onerror = (event) => {
           console.log('[rex-passive-data-kit] PDK database error. Unable to retrieve count of pending points.')
           console.log(event)
+
+          this.currentlyUploading = false
 
           reject(`Database error: ${event}`)
         }
