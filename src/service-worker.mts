@@ -439,7 +439,32 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     }
   }
 
+  // Deployments that issue the participant identifier through rex-core rather
+  // than through passive_data_kit.identifier leave the configured value unset;
+  // the server may even strip the key when it injects upload credentials. Fall
+  // back to rex-core, which owns the identifier, instead of uploading under the
+  // placeholder.
+  async resolveIdentifier(): Promise<string> {
+    if (this.identifier !== '' && this.identifier !== 'unknown-id') {
+      return this.identifier
+    }
+
+    const identifier = await new Promise<string>((resolve) => {
+      rexCorePlugin.handleMessage({ messageType: 'getIdentifier' }, this, (response: string) => {
+        resolve(response)
+      })
+    })
+
+    if (typeof identifier === 'string' && identifier !== '') {
+      this.identifier = identifier
+    }
+
+    return this.identifier
+  }
+
   async uploadBundle(points:REXPDKDataPoint[]) {
+    await this.resolveIdentifier()
+
     if (this.ignoredIdentifiers.includes(this.identifier)) {
       console.log(`[rex-passive-data-kit] Skipping upload for ignored identifier "${this.identifier}".`)
 

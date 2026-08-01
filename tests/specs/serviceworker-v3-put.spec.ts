@@ -163,6 +163,32 @@ test('an ignored identifier resolves without uploading', async ({serviceWorker})
   expect(reply === undefined || reply['request-headers'] === undefined).toBe(true)
 })
 
+test('an identifier absent from configuration falls back to rex-core', async ({serviceWorker}) => {
+  // The server strips passive_data_kit.identifier when it injects v3 upload
+  // credentials, so the module must source the participant id from rex-core or
+  // it uploads everything under the "unknown-id" placeholder.
+  const identifierlessConfiguration = {
+    endpoint: ENDPOINT,
+    endpoint_version: 'v3',
+    authorization: { token: VALID_BEARER_TOKEN }
+  }
+
+  const result = await serviceWorker.evaluate(async ([configuration]) => {
+    const pdk = self.rexPDKPlugin
+
+    await new Promise((resolve) => {
+      self.rexCorePlugin.handleMessage({ messageType: 'setIdentifier', identifier: 'core-issued-id' }, this, resolve)
+    })
+
+    pdk.identifier = 'unknown-id'
+    pdk.updateConfiguration(configuration)
+
+    return pdk.resolveIdentifier()
+  }, [identifierlessConfiguration])
+
+  expect(result).toEqual('core-issued-id')
+})
+
 // The drift this extraction fixes: Keystone's copy of the stamping loop moved
 // neither half of enqueuedAt, so points shipped without enqueued-at metadata AND
 // with a stray enqueuedAt key still on the body. Both transports must do both.
