@@ -50,6 +50,31 @@ export interface REXPDKConfiguration {
   endpoint: string,
   identifier: string,
   field_key?: string,
+  endpoint_version?: string,
+  authorization?: REXPDKAuthorization,
+  ignored_identifiers?: string[],
+}
+
+export interface REXPDKAuthorization {
+  token?: string,
+}
+
+export class REXPDKUploadError extends Error {
+  status: number
+  responseBody: unknown
+
+  constructor(status: number, responseBody: unknown) {
+    super(`Data bundle upload failed with HTTP ${status}.`)
+
+    this.name = 'REXPDKUploadError'
+    this.status = status
+    this.responseBody = responseBody
+  }
+}
+
+const PDK_UPLOAD_SUCCESS_REPLY = {
+  message: 'Data bundle added successfully, and ready for processing.',
+  added: true,
 }
 
 export interface REXPDKEvent {
@@ -73,6 +98,9 @@ export class PassiveDataKitPointAnnotator {
 
 class PassiveDataKitModule extends REXServiceWorkerModule {
   uploadUrl: string = ''
+  endpointVersion: string = ''
+  bearerToken: string = ''
+  ignoredIdentifiers: string[] = []
   serverKey: string = ''
   serverFieldKey: Uint8Array<ArrayBufferLike> | null = null
   localFieldKey: Uint8Array<ArrayBufferLike> | null = null
@@ -136,7 +164,13 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
   updateConfiguration(config: REXPDKConfiguration) {
     this.uploadUrl = config['endpoint']
-    
+
+    // Validation waits until upload time: a configuration refresh that throws
+    // would leave the module wedged on a stale endpoint.
+    this.endpointVersion = config['endpoint_version'] || ''
+    this.bearerToken = config['authorization']?.token || ''
+    this.ignoredIdentifiers = config['ignored_identifiers'] || []
+
     if (config['identifier'] !== undefined && config['identifier'] !== null) {
       this.identifier = config['identifier']
     } else {
@@ -326,101 +360,172 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
     })
   }
 
-  async uploadBundle(points:REXPDKDataPoint[]) {
-    return new Promise<any>((resolve, reject) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-      const manifest = chrome.runtime.getManifest()
+  stampPointMetadata(points:REXPDKDataPoint[]) {
+    const manifest = chrome.runtime.getManifest()
 
-      const keyPair = nacl.box.keyPair() // eslint-disable-line @typescript-eslint/no-unused-vars
+    const keyPair = nacl.box.keyPair() // eslint-disable-line @typescript-eslint/no-unused-vars
 
-      const serverPublicKey = naclUtil.decodeBase64(this.serverKey) // eslint-disable-line @typescript-eslint/no-unused-vars
+    const serverPublicKey = naclUtil.decodeBase64(this.serverKey) // eslint-disable-line @typescript-eslint/no-unused-vars
 
-      const userAgent = manifest.name + '/' + manifest.version + ' ' + navigator.userAgent
+    const userAgent = manifest.name + '/' + manifest.version + ' ' + navigator.userAgent
 
-      for (let i = 0; i < points.length; i++) {
-        let pointDate:number|undefined = points[i].date
+    for (let i = 0; i < points.length; i++) {
+      let pointDate:number|undefined = points[i].date
 
-        if (pointDate === undefined) {
-          pointDate = Date.now()
-        }
-
-        const metadata: REXPDKPointMetadata = {
-          source: `${this.identifier}`,
-          generator: points[i].generatorId + ': ' + userAgent,
-          'generator-id': points[i].generatorId,
-          timestamp: pointDate / 1000,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        }
-
-        if (points[i].configurationHash !== undefined) {
-          metadata['configuration-hash'] = points[i].configurationHash
-
-          delete points[i].configurationHash
-        }
-
-        if (points[i].enqueuedAt !== undefined) {
-          metadata['enqueued-at'] = points[i].enqueuedAt
-
-          delete points[i].enqueuedAt
-        }
-
-        if (points[i].date === undefined) {
-          points[i].date = (new Date()).getTime()
-        }
-
-        // metadata['generated-key'] = nacl.util.encodeBase64(keyPair.publicKey)
-
-        points[i]['passive-data-metadata'] = metadata
-
-        // pdk.encryptFields(serverPublicKey, keyPair.secretKey, points[i])
+      if (pointDate === undefined) {
+        pointDate = Date.now()
       }
 
-      const dataString = JSON.stringify(points, null, 2)
+      const metadata: REXPDKPointMetadata = {
+        source: `${this.identifier}`,
+        generator: points[i].generatorId + ': ' + userAgent,
+        'generator-id': points[i].generatorId,
+        timestamp: pointDate / 1000,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }
 
-      const byteArray = new TextEncoder().encode(dataString)
-      const cs = new CompressionStream('gzip')
-      const writer = cs.writable.getWriter()
-      writer.write(byteArray)
-      writer.close()
+      if (points[i].configurationHash !== undefined) {
+        metadata['configuration-hash'] = points[i].configurationHash
 
-      const compressedResponse = new Response(cs.readable)
+        delete points[i].configurationHash
+      }
 
-      compressedResponse.arrayBuffer()
-        .then((buffer) => {
-          const compressedBase64 = this.blobToB64(buffer)
+      if (points[i].enqueuedAt !== undefined) {
+        metadata['enqueued-at'] = points[i].enqueuedAt
 
-          console.log(`[rex-passive-data-kit] Upload to "${this.uploadUrl}"...`)
+        delete points[i].enqueuedAt
+      }
 
-          fetch(this.uploadUrl, {
-            method: 'POST',
-            mode: 'cors', // no-cors, *cors, same-origin
-            cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'X-PDK-IDENTIFIER': this.identifier
-            },
-            redirect: 'follow', // manual, *follow, error
-            referrerPolicy: 'no-referrer', // no-referrer, *no-referrer-when-downgrade, origin, origin-when-cross-origin, same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
-            body: new URLSearchParams({
-              compression: 'gzip',
-              payload: compressedBase64
-            })
-          }) // body data type must match "Content-Type" header
-            .then((response) => {
-              response.json().then((reply) => {
-                if (response.ok) {
-                  resolve(reply)
-                } else {
-                  reject(reply)
-                }
-              })
-            })
-            .catch((error) => {
-              console.error('Error:', error)
+      if (points[i].date === undefined) {
+        points[i].date = (new Date()).getTime()
+      }
 
-              reject(error)
-            })
-        })
+      // metadata['generated-key'] = nacl.util.encodeBase64(keyPair.publicKey)
+
+      points[i]['passive-data-metadata'] = metadata
+
+      // pdk.encryptFields(serverPublicKey, keyPair.secretKey, points[i])
+    }
+  }
+
+  async gzipUtf8(payload: string): Promise<ArrayBuffer> {
+    const stream = new Blob([payload])
+      .stream()
+      .pipeThrough(new CompressionStream('gzip'))
+
+    return await new Response(stream).arrayBuffer()
+  }
+
+  // An empty body on a 2xx is a success, not a parse failure: edge caches ahead
+  // of the ingest endpoint answer a stored PUT with no content at all.
+  async jsonReplyOrDefault(response: Response): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const text = await response.text()
+
+    if (text.trim() === '') {
+      return PDK_UPLOAD_SUCCESS_REPLY
+    }
+
+    try {
+      return JSON.parse(text)
+    } catch (error) {
+      if (response.ok) {
+        return PDK_UPLOAD_SUCCESS_REPLY
+      }
+
+      return {
+        error: text,
+        parse_error: `${error}`,
+      }
+    }
+  }
+
+  async uploadBundle(points:REXPDKDataPoint[]) {
+    if (this.ignoredIdentifiers.includes(this.identifier)) {
+      console.log(`[rex-passive-data-kit] Skipping upload for ignored identifier "${this.identifier}".`)
+
+      return PDK_UPLOAD_SUCCESS_REPLY
+    }
+
+    this.stampPointMetadata(points)
+
+    const compressed = await this.gzipUtf8(JSON.stringify(points, null, 2))
+
+    if (this.endpointVersion === 'v3') {
+      return this.putBundle(compressed)
+    }
+
+    return this.postBundle(compressed)
+  }
+
+  // v3 ingest: raw gzip bytes with a bearer credential, identifying the
+  // participant by header so no token or identifier lands in the URL.
+  async putBundle(compressed: ArrayBuffer) {
+    if (this.uploadUrl === '') {
+      throw new Error('Unable to upload data bundle: passive_data_kit.endpoint is missing.')
+    }
+
+    if (this.bearerToken === '') {
+      throw new Error('Unable to upload data bundle: passive_data_kit.authorization.token is missing.')
+    }
+
+    if (this.identifier === '' || this.identifier.toLowerCase() === 'undefined') {
+      throw new Error('Unable to upload data bundle: participant identifier is missing.')
+    }
+
+    console.log(`[rex-passive-data-kit] Upload to "${this.uploadUrl}"...`)
+
+    const response = await fetch(this.uploadUrl, {
+      method: 'PUT',
+      mode: 'cors',
+      cache: 'no-cache',
+      headers: {
+        'Authorization': `Bearer ${this.bearerToken}`,
+        'Content-Type': 'application/json',
+        'Content-Encoding': 'gzip',
+        'X-PDK-IDENTIFIER': this.identifier
+      },
+      redirect: 'follow',
+      referrerPolicy: 'no-referrer',
+      body: compressed
     })
+
+    const reply = await this.jsonReplyOrDefault(response)
+
+    if (response.ok === false) {
+      throw new REXPDKUploadError(response.status, reply)
+    }
+
+    return reply
+  }
+
+  async postBundle(compressed: ArrayBuffer) {
+    const compressedBase64 = this.blobToB64(compressed)
+
+    console.log(`[rex-passive-data-kit] Upload to "${this.uploadUrl}"...`)
+
+    const response = await fetch(this.uploadUrl, {
+      method: 'POST',
+      mode: 'cors', // no-cors, *cors, same-origin
+      cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-PDK-IDENTIFIER': this.identifier
+      },
+      redirect: 'follow', // manual, *follow, error
+      referrerPolicy: 'no-referrer', // no-referrer, *no-referrer-when-downgrade, origin, origin-when-cross-origin, same-origin, strict-origin, strict-origin-when-cross-origin, unsafe-url
+      body: new URLSearchParams({
+        compression: 'gzip',
+        payload: compressedBase64
+      })
+    }) // body data type must match "Content-Type" header
+
+    const reply = await this.jsonReplyOrDefault(response)
+
+    if (response.ok === false) {
+      throw new REXPDKUploadError(response.status, reply)
+    }
+
+    return reply
   }
 
   updateDataPoints(dataPoints: REXPDKDataPointDBRecord[]) {
