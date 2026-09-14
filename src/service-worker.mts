@@ -586,6 +586,8 @@ class PassiveDataKitModule extends REXServiceWorkerModule {
 
         const uploadBlock = () => {
           this.persistDataPoints().then((pointsSaved: number) => {
+            console.log(`[rex-passive-data-kit] ${pointsSaved} points saved successfully.`)
+            
             if (this.database === null) {
               this.currentlyUploading = false
 
